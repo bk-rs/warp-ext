@@ -1,4 +1,5 @@
 [workspace]
 members = [
     "warp-filter-request",
+    "warp-request-body",
 ]

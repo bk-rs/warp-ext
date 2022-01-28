@@ -1,0 +1,15 @@
+[package]
+name = "warp-request-body"
+version = "0.0.0"
+authors = ["vkill <vkill.net@gmail.com>"]
+edition = "2021"
+description = "warp Request Body"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/bk-rs/warp-ext"
+homepage = "https://github.com/bk-rs/warp-ext"
+documentation = "https://docs.rs/warp-request-body"
+keywords = []
+categories = []
+readme = "README.md"
+
+[dependencies]
