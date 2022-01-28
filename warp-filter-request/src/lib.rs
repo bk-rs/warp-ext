@@ -35,6 +35,66 @@ mod tests {
         Buf, Error as WarpError, Filter as _, Stream,
     };
 
+    #[derive(Debug, Clone, PartialEq)]
+    struct Ext1(usize);
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct Ext2(isize);
+
+    #[tokio::test]
+    async fn test_and_extension() {
+        //
+        let req = warp::test::request()
+            .extension(Ext1(1))
+            .filter(&with_body_aggregate_and_one_extension::<Ext1>())
+            .await
+            .unwrap();
+        assert_eq!(req.extensions().get::<Ext1>().unwrap(), &Ext1(1));
+
+        let req = warp::test::request()
+            .extension(Ext1(1))
+            .extension(Ext2(-1))
+            .filter(&with_body_aggregate_and_two_extensions::<Ext1, Ext2>())
+            .await
+            .unwrap();
+        assert_eq!(req.extensions().get::<Ext1>().unwrap(), &Ext1(1));
+        assert_eq!(req.extensions().get::<Ext2>().unwrap(), &Ext2(-1));
+
+        //
+        let req = warp::test::request()
+            .extension(Ext1(1))
+            .filter(&with_body_bytes_and_one_extension::<Ext1>())
+            .await
+            .unwrap();
+        assert_eq!(req.extensions().get::<Ext1>().unwrap(), &Ext1(1));
+
+        let req = warp::test::request()
+            .extension(Ext1(1))
+            .extension(Ext2(-1))
+            .filter(&with_body_bytes_and_two_extensions::<Ext1, Ext2>())
+            .await
+            .unwrap();
+        assert_eq!(req.extensions().get::<Ext1>().unwrap(), &Ext1(1));
+        assert_eq!(req.extensions().get::<Ext2>().unwrap(), &Ext2(-1));
+
+        //
+        let req = warp::test::request()
+            .extension(Ext1(1))
+            .filter(&with_body_stream_and_one_extension::<Ext1>())
+            .await
+            .unwrap();
+        assert_eq!(req.extensions().get::<Ext1>().unwrap(), &Ext1(1));
+
+        let req = warp::test::request()
+            .extension(Ext1(1))
+            .extension(Ext2(-1))
+            .filter(&with_body_stream_and_two_extensions::<Ext1, Ext2>())
+            .await
+            .unwrap();
+        assert_eq!(req.extensions().get::<Ext1>().unwrap(), &Ext1(1));
+        assert_eq!(req.extensions().get::<Ext2>().unwrap(), &Ext2(-1));
+    }
+
     #[tokio::test]
     async fn integration_test() -> Result<(), Box<dyn error::Error>> {
         let listen_addr =
@@ -66,8 +126,8 @@ mod tests {
             async fn aggregate_2(
                 req: Request<impl Buf>,
             ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
-                let (_, _) = req.into_parts();
-                // TODO
+                let (_, body) = req.into_parts();
+                assert_eq!(body.chunk(), b"aggregate_2");
 
                 let mut res = Response::new(Body::empty());
                 res.headers_mut().insert("x-aggregate_2", 1.into());
@@ -76,6 +136,21 @@ mod tests {
             let filter_aggregate_2 = warp::path("aggregate_2")
                 .and(with_body_aggregate_and_one_extension::<()>())
                 .and_then(aggregate_2);
+
+            //
+            async fn aggregate_3(
+                req: Request<impl Buf>,
+            ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
+                let (_, body) = req.into_parts();
+                assert_eq!(body.chunk(), b"aggregate_3");
+
+                let mut res = Response::new(Body::empty());
+                res.headers_mut().insert("x-aggregate_3", 1.into());
+                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(res))
+            }
+            let filter_aggregate_3 = warp::path("aggregate_3")
+                .and(with_body_aggregate_and_two_extensions::<(), ()>())
+                .and_then(aggregate_3);
 
             //
             async fn bytes_1(
@@ -93,18 +168,54 @@ mod tests {
                 .and_then(bytes_1);
 
             //
+            async fn bytes_2(
+                req: Request<Bytes>,
+            ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
+                let (_, body) = req.into_parts();
+                assert_eq!(&body[..], b"bytes_2");
+
+                let mut res = Response::new(Body::empty());
+                res.headers_mut().insert("x-bytes_2", 1.into());
+                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(res))
+            }
+            let filter_bytes_2 = warp::path("bytes_2")
+                .and(with_body_bytes_and_one_extension::<()>())
+                .and_then(bytes_2);
+
+            //
+            async fn bytes_3(
+                req: Request<Bytes>,
+            ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
+                let (_, body) = req.into_parts();
+                assert_eq!(&body[..], b"bytes_3");
+
+                let mut res = Response::new(Body::empty());
+                res.headers_mut().insert("x-bytes_3", 1.into());
+                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(res))
+            }
+            let filter_bytes_3 = warp::path("bytes_3")
+                .and(with_body_bytes_and_two_extensions::<(), ()>())
+                .and_then(bytes_3);
+
+            //
+            async fn to_bytes(
+                mut stream: impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin,
+            ) -> Vec<u8> {
+                let mut bytes = vec![];
+                while let Some(buf) = stream.next().await {
+                    let buf = buf.unwrap();
+                    bytes.extend_from_slice(buf.chunk());
+                }
+                bytes
+            }
+
             async fn stream_1(
                 req: Request<
                     impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin,
                 >,
             ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
-                let (_, mut body) = req.into_parts();
-                let mut body_bytes = vec![];
-                while let Some(buf) = body.next().await {
-                    let buf = buf.unwrap();
-                    body_bytes.extend_from_slice(buf.chunk());
-                }
-                assert_eq!(body_bytes, b"stream_1");
+                let (_, body) = req.into_parts();
+                assert_eq!(to_bytes(body).await, b"stream_1");
 
                 let mut res = Response::new(Body::empty());
                 res.headers_mut().insert("x-stream_1", 1.into());
@@ -115,11 +226,50 @@ mod tests {
                 .and_then(stream_1);
 
             //
+            async fn stream_2(
+                req: Request<
+                    impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin,
+                >,
+            ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
+                let (_, body) = req.into_parts();
+                assert_eq!(to_bytes(body).await, b"stream_2");
+
+                let mut res = Response::new(Body::empty());
+                res.headers_mut().insert("x-stream_2", 1.into());
+                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(res))
+            }
+            let filter_stream_2 = warp::path("stream_2")
+                .and(with_body_stream_and_one_extension::<()>())
+                .and_then(stream_2);
+
+            //
+            async fn stream_3(
+                req: Request<
+                    impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin,
+                >,
+            ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
+                let (_, body) = req.into_parts();
+                assert_eq!(to_bytes(body).await, b"stream_3");
+
+                let mut res = Response::new(Body::empty());
+                res.headers_mut().insert("x-stream_3", 1.into());
+                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(res))
+            }
+            let filter_stream_3 = warp::path("stream_3")
+                .and(with_body_stream_and_two_extensions::<(), ()>())
+                .and_then(stream_3);
+
+            //
             warp::serve(
                 filter_aggregate_1
                     .or(filter_aggregate_2)
+                    .or(filter_aggregate_3)
                     .or(filter_bytes_1)
-                    .or(filter_stream_1),
+                    .or(filter_bytes_2)
+                    .or(filter_bytes_3)
+                    .or(filter_stream_1)
+                    .or(filter_stream_2)
+                    .or(filter_stream_3),
             )
             .run(listen_addr)
             .await
@@ -150,6 +300,13 @@ mod tests {
             ),
             (
                 Request::builder()
+                    .uri(format!("http://{}{}", listen_addr, "/aggregate_3"))
+                    .body(Body::from("aggregate_3"))
+                    .unwrap(),
+                "x-aggregate_3",
+            ),
+            (
+                Request::builder()
                     .uri(format!("http://{}{}", listen_addr, "/bytes_1"))
                     .body(Body::from("bytes_1"))
                     .unwrap(),
@@ -157,10 +314,38 @@ mod tests {
             ),
             (
                 Request::builder()
+                    .uri(format!("http://{}{}", listen_addr, "/bytes_2"))
+                    .body(Body::from("bytes_2"))
+                    .unwrap(),
+                "x-bytes_2",
+            ),
+            (
+                Request::builder()
+                    .uri(format!("http://{}{}", listen_addr, "/bytes_3"))
+                    .body(Body::from("bytes_3"))
+                    .unwrap(),
+                "x-bytes_3",
+            ),
+            (
+                Request::builder()
                     .uri(format!("http://{}{}", listen_addr, "/stream_1"))
                     .body(Body::from("stream_1"))
                     .unwrap(),
                 "x-stream_1",
+            ),
+            (
+                Request::builder()
+                    .uri(format!("http://{}{}", listen_addr, "/stream_2"))
+                    .body(Body::from("stream_2"))
+                    .unwrap(),
+                "x-stream_2",
+            ),
+            (
+                Request::builder()
+                    .uri(format!("http://{}{}", listen_addr, "/stream_3"))
+                    .body(Body::from("stream_3"))
+                    .unwrap(),
+                "x-stream_3",
             ),
         ] {
             let res = client.request(req).await?;
