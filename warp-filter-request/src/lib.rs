@@ -28,7 +28,7 @@ mod tests {
     use std::{error, net::SocketAddr};
 
     use bytes::Bytes;
-    use futures_util::StreamExt;
+    use futures_util::StreamExt as _;
     use warp::{
         http::Error as WarpHttpError,
         hyper::{http::Method, Body, Client, Request, Response},
@@ -275,7 +275,7 @@ mod tests {
             .await
         });
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
         //
         let client = Client::new();
