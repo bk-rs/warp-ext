@@ -5,7 +5,6 @@
 pub mod error;
 
 pub(crate) mod common;
-
 mod with_body_aggregate;
 mod with_body_bytes;
 mod with_body_stream;
@@ -28,16 +27,13 @@ mod tests {
     use core::convert::Infallible;
     use std::{error, net::SocketAddr};
 
+    use bytes::Bytes;
+    use futures_util::StreamExt;
     use warp::{
         http::Error as WarpHttpError,
         hyper::{http::Method, Body, Client, Request, Response},
-        Buf, Filter as _,
+        Buf, Error as WarpError, Filter as _, Stream,
     };
-
-    #[derive(Debug, Clone, PartialEq)]
-    struct Extension1(usize);
-    #[derive(Debug, Clone, PartialEq)]
-    struct Extension2(isize);
 
     #[tokio::test]
     async fn integration_test() -> Result<(), Box<dyn error::Error>> {
@@ -57,9 +53,10 @@ mod tests {
                 assert_eq!(parts.uri.query(), Some("foo=1"));
                 assert_eq!(parts.headers.get("x-bar").unwrap(), "1");
                 assert_eq!(body.chunk(), b"aggregate_1");
-                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(Response::new(
-                    Body::empty(),
-                )))
+
+                let mut res = Response::new(Body::empty());
+                res.headers_mut().insert("x-aggregate_1", 1.into());
+                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(res))
             }
             let filter_aggregate_1 = warp::path("aggregate_1")
                 .and(with_body_aggregate())
@@ -71,18 +68,61 @@ mod tests {
             ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
                 let (_, _) = req.into_parts();
                 // TODO
-                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(Response::new(
-                    Body::empty(),
-                )))
+
+                let mut res = Response::new(Body::empty());
+                res.headers_mut().insert("x-aggregate_2", 1.into());
+                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(res))
             }
             let filter_aggregate_2 = warp::path("aggregate_2")
                 .and(with_body_aggregate_and_one_extension::<()>())
                 .and_then(aggregate_2);
 
             //
-            warp::serve(filter_aggregate_1.or(filter_aggregate_2))
-                .run(listen_addr)
-                .await
+            async fn bytes_1(
+                req: Request<Bytes>,
+            ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
+                let (_, body) = req.into_parts();
+                assert_eq!(&body[..], b"bytes_1");
+
+                let mut res = Response::new(Body::empty());
+                res.headers_mut().insert("x-bytes_1", 1.into());
+                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(res))
+            }
+            let filter_bytes_1 = warp::path("bytes_1")
+                .and(with_body_bytes())
+                .and_then(bytes_1);
+
+            //
+            async fn stream_1(
+                req: Request<
+                    impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin,
+                >,
+            ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
+                let (_, mut body) = req.into_parts();
+                let mut body_bytes = vec![];
+                while let Some(buf) = body.next().await {
+                    let buf = buf.unwrap();
+                    body_bytes.extend_from_slice(buf.chunk());
+                }
+                assert_eq!(body_bytes, b"stream_1");
+
+                let mut res = Response::new(Body::empty());
+                res.headers_mut().insert("x-stream_1", 1.into());
+                Result::<Result<Response<Body>, WarpHttpError>, Infallible>::Ok(Ok(res))
+            }
+            let filter_stream_1 = warp::path("stream_1")
+                .and(with_body_stream())
+                .and_then(stream_1);
+
+            //
+            warp::serve(
+                filter_aggregate_1
+                    .or(filter_aggregate_2)
+                    .or(filter_bytes_1)
+                    .or(filter_stream_1),
+            )
+            .run(listen_addr)
+            .await
         });
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -91,20 +131,41 @@ mod tests {
         let client = Client::new();
 
         //
-        for req in vec![
-            Request::builder()
-                .method(Method::POST)
-                .uri(format!("http://{}{}", listen_addr, "/aggregate_1?foo=1"))
-                .header("x-bar", "1")
-                .body(Body::from("aggregate_1"))
-                .unwrap(),
-            Request::builder()
-                .uri(format!("http://{}{}", listen_addr, "/aggregate_2"))
-                .body(Body::from("aggregate_2"))
-                .unwrap(),
+        for (req, res_header_key) in vec![
+            (
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("http://{}{}", listen_addr, "/aggregate_1?foo=1"))
+                    .header("x-bar", "1")
+                    .body(Body::from("aggregate_1"))
+                    .unwrap(),
+                "x-aggregate_1",
+            ),
+            (
+                Request::builder()
+                    .uri(format!("http://{}{}", listen_addr, "/aggregate_2"))
+                    .body(Body::from("aggregate_2"))
+                    .unwrap(),
+                "x-aggregate_2",
+            ),
+            (
+                Request::builder()
+                    .uri(format!("http://{}{}", listen_addr, "/bytes_1"))
+                    .body(Body::from("bytes_1"))
+                    .unwrap(),
+                "x-bytes_1",
+            ),
+            (
+                Request::builder()
+                    .uri(format!("http://{}{}", listen_addr, "/stream_1"))
+                    .body(Body::from("stream_1"))
+                    .unwrap(),
+                "x-stream_1",
+            ),
         ] {
             let res = client.request(req).await?;
             assert!(res.status().is_success());
+            assert_eq!(res.headers().get(res_header_key).unwrap(), "1");
         }
 
         //
