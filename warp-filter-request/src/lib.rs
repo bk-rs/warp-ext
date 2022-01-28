@@ -95,6 +95,28 @@ mod tests {
         assert_eq!(req.extensions().get::<Ext2>().unwrap(), &Ext2(-1));
     }
 
+    //
+    fn buf_to_bytes(mut buf: impl Buf) -> Vec<u8> {
+        let mut bytes = vec![];
+        while buf.has_remaining() {
+            bytes.extend_from_slice(buf.chunk());
+            let cnt = buf.chunk().len();
+            buf.advance(cnt);
+        }
+        bytes
+    }
+
+    async fn stream_to_bytes(
+        mut stream: impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin,
+    ) -> Vec<u8> {
+        let mut bytes = vec![];
+        while let Some(buf) = stream.next().await {
+            let buf = buf.unwrap();
+            bytes.extend_from_slice(buf.chunk());
+        }
+        bytes
+    }
+
     #[tokio::test]
     async fn integration_test() -> Result<(), Box<dyn error::Error>> {
         let listen_addr =
@@ -112,7 +134,7 @@ mod tests {
                 assert_eq!(parts.uri.path(), "/aggregate_1");
                 assert_eq!(parts.uri.query(), Some("foo=1"));
                 assert_eq!(parts.headers.get("x-bar").unwrap(), "1");
-                assert_eq!(body.chunk(), b"aggregate_1");
+                assert_eq!(buf_to_bytes(body), b"aggregate_1");
 
                 let mut res = Response::new(Body::empty());
                 res.headers_mut().insert("x-aggregate_1", 1.into());
@@ -127,7 +149,7 @@ mod tests {
                 req: Request<impl Buf>,
             ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
                 let (_, body) = req.into_parts();
-                assert_eq!(body.chunk(), b"aggregate_2");
+                assert_eq!(buf_to_bytes(body), b"aggregate_2");
 
                 let mut res = Response::new(Body::empty());
                 res.headers_mut().insert("x-aggregate_2", 1.into());
@@ -142,7 +164,7 @@ mod tests {
                 req: Request<impl Buf>,
             ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
                 let (_, body) = req.into_parts();
-                assert_eq!(body.chunk(), b"aggregate_3");
+                assert_eq!(buf_to_bytes(body), b"aggregate_3");
 
                 let mut res = Response::new(Body::empty());
                 res.headers_mut().insert("x-aggregate_3", 1.into());
@@ -198,24 +220,13 @@ mod tests {
                 .and_then(bytes_3);
 
             //
-            async fn to_bytes(
-                mut stream: impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin,
-            ) -> Vec<u8> {
-                let mut bytes = vec![];
-                while let Some(buf) = stream.next().await {
-                    let buf = buf.unwrap();
-                    bytes.extend_from_slice(buf.chunk());
-                }
-                bytes
-            }
-
             async fn stream_1(
                 req: Request<
                     impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin,
                 >,
             ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
                 let (_, body) = req.into_parts();
-                assert_eq!(to_bytes(body).await, b"stream_1");
+                assert_eq!(stream_to_bytes(body).await, b"stream_1");
 
                 let mut res = Response::new(Body::empty());
                 res.headers_mut().insert("x-stream_1", 1.into());
@@ -232,7 +243,7 @@ mod tests {
                 >,
             ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
                 let (_, body) = req.into_parts();
-                assert_eq!(to_bytes(body).await, b"stream_2");
+                assert_eq!(stream_to_bytes(body).await, b"stream_2");
 
                 let mut res = Response::new(Body::empty());
                 res.headers_mut().insert("x-stream_2", 1.into());
@@ -249,7 +260,7 @@ mod tests {
                 >,
             ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
                 let (_, body) = req.into_parts();
-                assert_eq!(to_bytes(body).await, b"stream_3");
+                assert_eq!(stream_to_bytes(body).await, b"stream_3");
 
                 let mut res = Response::new(Body::empty());
                 res.headers_mut().insert("x-stream_3", 1.into());
