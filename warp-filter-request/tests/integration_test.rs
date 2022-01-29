@@ -27,10 +27,7 @@ async fn integration_test() -> Result<(), Box<dyn error::Error>> {
             assert_eq!(parts.uri.path(), "/aggregate_1");
             assert_eq!(parts.uri.query(), Some("foo=1"));
             assert_eq!(parts.headers.get("x-bar").unwrap(), "1");
-            assert_eq!(
-                warp_request_body_utils::buf_to_bytes(body),
-                Bytes::copy_from_slice(b"aggregate_1")
-            );
+            assert_eq!(buf_to_bytes(body), Bytes::copy_from_slice(b"aggregate_1"));
 
             let mut res = Response::new(Body::empty());
             res.headers_mut().insert("x-aggregate_1", 1.into());
@@ -75,7 +72,7 @@ async fn integration_test() -> Result<(), Box<dyn error::Error>> {
             req: Request<Bytes>,
         ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
             let (_, body) = req.into_parts();
-            assert_eq!(&body[..], b"bytes_1");
+            assert_eq!(body, Bytes::copy_from_slice(b"bytes_1"));
 
             let mut res = Response::new(Body::empty());
             res.headers_mut().insert("x-bytes_1", 1.into());
@@ -90,7 +87,7 @@ async fn integration_test() -> Result<(), Box<dyn error::Error>> {
             req: Request<Bytes>,
         ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
             let (_, body) = req.into_parts();
-            assert_eq!(&body[..], b"bytes_2");
+            assert_eq!(body, Bytes::copy_from_slice(b"bytes_2"));
 
             let mut res = Response::new(Body::empty());
             res.headers_mut().insert("x-bytes_2", 1.into());
@@ -105,7 +102,7 @@ async fn integration_test() -> Result<(), Box<dyn error::Error>> {
             req: Request<Bytes>,
         ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
             let (_, body) = req.into_parts();
-            assert_eq!(&body[..], b"bytes_3");
+            assert_eq!(body, Bytes::copy_from_slice(b"bytes_3"));
 
             let mut res = Response::new(Body::empty());
             res.headers_mut().insert("x-bytes_3", 1.into());
