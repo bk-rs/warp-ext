@@ -178,17 +178,6 @@ mod tests {
         assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
 
         //
-        let req = warp::test::request()
-            .body("foo")
-            .filter(&warp_filter_request::with_body_aggregate())
-            .await
-            .unwrap();
-        let (_, buf) = req.into_parts();
-        let body = Body::with_buf(buf);
-        assert!(!body.require_to_bytes_async());
-        assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
-
-        //
         let buf = warp::test::request()
             .body("foo")
             .filter(&warp::body::aggregate())
@@ -200,6 +189,16 @@ mod tests {
             Bytes::copy_from_slice(b"foo")
         );
         assert!(body.next().await.is_none());
+
+        //
+        let req = warp::test::request()
+            .body("foo")
+            .filter(&warp_filter_request::with_body_aggregate())
+            .await
+            .unwrap();
+        let (_, body) = buf_request_to_body_request(req).into_parts();
+        assert!(!body.require_to_bytes_async());
+        assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
     }
 
     #[tokio::test]
@@ -210,17 +209,6 @@ mod tests {
             .filter(&warp::body::bytes())
             .await
             .unwrap();
-        let body = Body::with_bytes(bytes);
-        assert!(!body.require_to_bytes_async());
-        assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
-
-        //
-        let req = warp::test::request()
-            .body("foo")
-            .filter(&warp_filter_request::with_body_bytes())
-            .await
-            .unwrap();
-        let (_, bytes) = req.into_parts();
         let body = Body::with_bytes(bytes);
         assert!(!body.require_to_bytes_async());
         assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
@@ -237,6 +225,16 @@ mod tests {
             Bytes::copy_from_slice(b"foo")
         );
         assert!(body.next().await.is_none());
+
+        //
+        let req = warp::test::request()
+            .body("foo")
+            .filter(&warp_filter_request::with_body_bytes())
+            .await
+            .unwrap();
+        let (_, body) = bytes_request_to_body_request(req).into_parts();
+        assert!(!body.require_to_bytes_async());
+        assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
     }
 
     #[tokio::test]
@@ -247,20 +245,6 @@ mod tests {
             .filter(&warp::body::stream())
             .await
             .unwrap();
-        let body = Body::with_stream(stream);
-        assert!(body.require_to_bytes_async());
-        assert_eq!(
-            body.to_bytes_async().await.unwrap(),
-            Bytes::copy_from_slice(b"foo")
-        );
-
-        //
-        let req = warp::test::request()
-            .body("foo")
-            .filter(&warp_filter_request::with_body_stream())
-            .await
-            .unwrap();
-        let (_, stream) = req.into_parts();
         let body = Body::with_stream(stream);
         assert!(body.require_to_bytes_async());
         assert_eq!(
@@ -280,6 +264,19 @@ mod tests {
             Bytes::copy_from_slice(b"foo")
         );
         assert!(body.next().await.is_none());
+
+        //
+        let req = warp::test::request()
+            .body("foo")
+            .filter(&warp_filter_request::with_body_stream())
+            .await
+            .unwrap();
+        let (_, body) = stream_request_to_body_request(req).into_parts();
+        assert!(body.require_to_bytes_async());
+        assert_eq!(
+            body.to_bytes_async().await.unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
     }
 
     #[tokio::test]
@@ -301,6 +298,15 @@ mod tests {
             Bytes::copy_from_slice(b"foo")
         );
         assert!(body.next().await.is_none());
+
+        //
+        let req = HyperRequest::new(HyperBody::from("foo"));
+        let (_, body) = hyper_body_request_to_body_request(req).into_parts();
+        assert!(body.require_to_bytes_async());
+        assert_eq!(
+            body.to_bytes_async().await.unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
     }
 
     pin_project! {
