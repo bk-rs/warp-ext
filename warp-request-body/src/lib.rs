@@ -5,7 +5,6 @@ use core::{
 };
 
 use bytes::Bytes;
-use futures_util::TryStreamExt as _;
 use pin_project_lite::pin_project;
 use warp::{Buf, Error as WarpError, Stream};
 
@@ -52,10 +51,10 @@ impl Body {
     }
 
     pub fn with_stream(
-        inner: impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static,
+        inner: impl Stream<Item = Result<impl Buf + 'static, WarpError>> + Send + 'static,
     ) -> Self {
         Self::Stream {
-            inner: Box::pin(inner.map_ok(|buf| utils::buf_to_bytes(buf))),
+            inner: Box::pin(utils::buf_stream_to_bytes_stream(inner)),
         }
     }
 
@@ -75,7 +74,7 @@ impl Body {
         match self {
             Self::Buf { inner } => Ok(utils::buf_to_bytes(inner)),
             Self::Bytes { inner } => Ok(inner),
-            Self::Stream { inner } => utils::wrapped_stream_to_bytes(inner).await,
+            Self::Stream { inner } => utils::bytes_stream_to_bytes(inner).await,
         }
     }
 }
