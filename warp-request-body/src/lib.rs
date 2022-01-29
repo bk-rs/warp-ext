@@ -175,8 +175,21 @@ mod tests {
             .await
             .unwrap();
         let body = Body::with_buf(buf);
+        assert!(matches!(body, Body::Buf { inner: _ }));
         assert!(!body.require_to_bytes_async());
         assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
+
+        //
+        let buf = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::aggregate())
+            .await
+            .unwrap();
+        let body = Body::with_buf(buf);
+        assert_eq!(
+            body.to_bytes_async().await.unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
 
         //
         let buf = warp::test::request()
@@ -198,6 +211,7 @@ mod tests {
             .await
             .unwrap();
         let (_, body) = buf_request_to_body_request(req).into_parts();
+        assert!(matches!(body, Body::Buf { inner: _ }));
         assert!(!body.require_to_bytes_async());
         assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
     }
@@ -211,8 +225,21 @@ mod tests {
             .await
             .unwrap();
         let body = Body::with_bytes(bytes);
+        assert!(matches!(body, Body::Bytes { inner: _ }));
         assert!(!body.require_to_bytes_async());
         assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
+
+        //
+        let bytes = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::bytes())
+            .await
+            .unwrap();
+        let body = Body::with_bytes(bytes);
+        assert_eq!(
+            body.to_bytes_async().await.unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
 
         //
         let bytes = warp::test::request()
@@ -234,6 +261,7 @@ mod tests {
             .await
             .unwrap();
         let (_, body) = bytes_request_to_body_request(req).into_parts();
+        assert!(matches!(body, Body::Bytes { inner: _ }));
         assert!(!body.require_to_bytes_async());
         assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
     }
@@ -247,6 +275,7 @@ mod tests {
             .await
             .unwrap();
         let body = Body::with_stream(stream);
+        assert!(matches!(body, Body::Stream { inner: _ }));
         assert!(body.require_to_bytes_async());
         assert_eq!(
             body.to_bytes_async().await.unwrap(),
@@ -273,6 +302,7 @@ mod tests {
             .await
             .unwrap();
         let (_, body) = stream_request_to_body_request(req).into_parts();
+        assert!(matches!(body, Body::Stream { inner: _ }));
         assert!(body.require_to_bytes_async());
         assert_eq!(
             body.to_bytes_async().await.unwrap(),
@@ -285,6 +315,7 @@ mod tests {
         //
         let hyper_body = HyperBody::from("foo");
         let body = Body::with_hyper_body(hyper_body);
+        assert!(matches!(body, Body::HyperBody { inner: _ }));
         assert!(body.require_to_bytes_async());
         assert_eq!(
             body.to_bytes_async().await.unwrap(),
@@ -303,6 +334,7 @@ mod tests {
         //
         let req = HyperRequest::new(HyperBody::from("foo"));
         let (_, body) = hyper_body_request_to_body_request(req).into_parts();
+        assert!(matches!(body, Body::HyperBody { inner: _ }));
         assert!(body.require_to_bytes_async());
         assert_eq!(
             body.to_bytes_async().await.unwrap(),
