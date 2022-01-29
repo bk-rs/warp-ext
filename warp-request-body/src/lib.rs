@@ -5,10 +5,17 @@ use core::{
 };
 
 use bytes::Bytes;
+use futures_util::StreamExt;
 use pin_project_lite::pin_project;
-use warp::{Buf, Error as WarpError, Stream};
+use warp::{
+    hyper::{Body as HyperBody, Request as HyperRequest},
+    Buf, Error as WarpError, Stream,
+};
 
+pub mod error;
 pub mod utils;
+
+use error::Error;
 
 //
 pin_project! {
@@ -17,6 +24,7 @@ pin_project! {
         Buf { inner: Box<dyn Buf> },
         Bytes { inner: Bytes },
         Stream { #[pin] inner: Pin<Box<dyn Stream<Item = Result<Bytes, WarpError>> + Send + 'static>> },
+        HyperBody { #[pin] inner: HyperBody }
     }
 }
 
@@ -26,6 +34,7 @@ impl fmt::Display for Body {
             Self::Buf { inner: _ } => write!(f, "Buf"),
             Self::Bytes { inner: _ } => write!(f, "Bytes"),
             Self::Stream { inner: _ } => write!(f, "Stream"),
+            Self::HyperBody { inner: _ } => write!(f, "HyperBody"),
         }
     }
 }
@@ -54,12 +63,19 @@ impl Body {
         stream: impl Stream<Item = Result<impl Buf + 'static, WarpError>> + Send + 'static,
     ) -> Self {
         Self::Stream {
-            inner: Box::pin(utils::buf_stream_to_bytes_stream(stream)),
+            inner: utils::buf_stream_to_bytes_stream(stream).boxed(),
         }
     }
 
+    pub fn with_hyper_body(hyper_body: HyperBody) -> Self {
+        Self::HyperBody { inner: hyper_body }
+    }
+
     pub fn require_to_bytes_async(&self) -> bool {
-        matches!(self, Self::Stream { inner: _ })
+        matches!(
+            self,
+            Self::Stream { inner: _ } | Self::HyperBody { inner: _ }
+        )
     }
 
     pub fn to_bytes(self) -> Bytes {
@@ -67,21 +83,29 @@ impl Body {
             Self::Buf { inner } => utils::buf_to_bytes(inner),
             Self::Bytes { inner } => inner,
             Self::Stream { inner: _ } => panic!("Please call require_to_bytes_async first"),
+            Self::HyperBody { inner: _ } => panic!("Please call require_to_bytes_async first"),
         }
     }
 
-    pub async fn to_bytes_async(self) -> Result<Bytes, WarpError> {
+    pub async fn to_bytes_async(self) -> Result<Bytes, Error> {
         match self {
             Self::Buf { inner } => Ok(utils::buf_to_bytes(inner)),
             Self::Bytes { inner } => Ok(inner),
-            Self::Stream { inner } => utils::bytes_stream_to_bytes(inner).await,
+            Self::Stream { inner } => utils::bytes_stream_to_bytes(inner)
+                .await
+                .map_err(Into::into),
+            Self::HyperBody { inner } => {
+                utils::hyper_body_to_bytes(inner).await.map_err(Into::into)
+            }
         }
     }
 }
 
 //
+
+//
 impl Stream for Body {
-    type Item = Result<Bytes, WarpError>;
+    type Item = Result<Bytes, Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.project() {
@@ -104,9 +128,33 @@ impl Stream for Body {
                     Poll::Ready(None)
                 }
             }
-            BodyProj::Stream { inner } => inner.poll_next(cx),
+            BodyProj::Stream { inner } => inner.poll_next(cx).map_err(Into::into),
+            BodyProj::HyperBody { inner } => inner.poll_next(cx).map_err(Into::into),
         }
     }
+}
+
+//
+pub fn buf_request_to_body_request(req: HyperRequest<impl Buf + 'static>) -> HyperRequest<Body> {
+    let (parts, body) = req.into_parts();
+    HyperRequest::from_parts(parts, Body::with_buf(body))
+}
+
+pub fn bytes_request_to_body_request(req: HyperRequest<Bytes>) -> HyperRequest<Body> {
+    let (parts, body) = req.into_parts();
+    HyperRequest::from_parts(parts, Body::with_bytes(body))
+}
+
+pub fn stream_request_to_body_request(
+    req: HyperRequest<impl Stream<Item = Result<impl Buf + 'static, WarpError>> + Send + 'static>,
+) -> HyperRequest<Body> {
+    let (parts, body) = req.into_parts();
+    HyperRequest::from_parts(parts, Body::with_stream(body))
+}
+
+pub fn hyper_body_request_to_body_request(req: HyperRequest<HyperBody>) -> HyperRequest<Body> {
+    let (parts, body) = req.into_parts();
+    HyperRequest::from_parts(parts, Body::with_hyper_body(body))
 }
 
 #[cfg(test)]
@@ -225,6 +273,27 @@ mod tests {
             .await
             .unwrap();
         let mut body = Body::with_stream(stream);
+        assert_eq!(
+            body.next().await.unwrap().unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
+        assert!(body.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_with_hyper_body() {
+        //
+        let hyper_body = HyperBody::from("foo");
+        let body = Body::with_hyper_body(hyper_body);
+        assert!(body.require_to_bytes_async());
+        assert_eq!(
+            body.to_bytes_async().await.unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
+
+        //
+        let hyper_body = HyperBody::from("foo");
+        let mut body = Body::with_hyper_body(hyper_body);
         assert_eq!(
             body.next().await.unwrap().unwrap(),
             Bytes::copy_from_slice(b"foo")

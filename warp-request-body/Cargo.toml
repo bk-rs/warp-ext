@@ -26,5 +26,3 @@ hyper = { version = "0.14", default-features = false, features = ["client", "htt
 warp-filter-request = { version = "0.0", path = "../warp-filter-request" }
 
 futures-util = { version = "0.3" }
-
-portpicker = { version = "0.1" }

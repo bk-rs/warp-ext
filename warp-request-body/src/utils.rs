@@ -1,6 +1,9 @@
 use bytes::{Bytes, BytesMut};
 use futures_util::{StreamExt as _, TryStreamExt as _};
-use warp::{Buf, Error as WarpError, Stream};
+use warp::{
+    hyper::{Body as HyperBody, Error as HyperError},
+    Buf, Error as WarpError, Stream,
+};
 
 pub fn buf_to_bytes(mut buf: impl Buf) -> Bytes {
     let mut bytes_mut = BytesMut::new();
@@ -34,6 +37,15 @@ pub async fn bytes_stream_to_bytes(
 ) -> Result<Bytes, WarpError> {
     let mut bytes_mut = BytesMut::new();
     while let Some(bytes) = stream.next().await {
+        let bytes = bytes?;
+        bytes_mut.extend_from_slice(&bytes[..]);
+    }
+    Ok(bytes_mut.freeze())
+}
+
+pub async fn hyper_body_to_bytes(mut hyper_body: HyperBody) -> Result<Bytes, HyperError> {
+    let mut bytes_mut = BytesMut::new();
+    while let Some(bytes) = hyper_body.next().await {
         let bytes = bytes?;
         bytes_mut.extend_from_slice(&bytes[..]);
     }
@@ -91,6 +103,15 @@ mod tests {
         let stream = buf_stream_to_bytes_stream(stream);
         assert_eq!(
             bytes_stream_to_bytes(stream).await.unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_hyper_body_to_bytes() {
+        let hyper_body = HyperBody::from("foo");
+        assert_eq!(
+            hyper_body_to_bytes(hyper_body).await.unwrap(),
             Bytes::copy_from_slice(b"foo")
         );
     }
