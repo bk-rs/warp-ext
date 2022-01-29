@@ -1,6 +1,6 @@
 [package]
 name = "warp-request-body"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["vkill <vkill.net@gmail.com>"]
 edition = "2021"
 description = "warp Request Body"
@@ -21,8 +21,7 @@ pin-project-lite = { version = "0.2" }
 
 [dev-dependencies]
 tokio = { version = "1.15", features = ["macros", "rt-multi-thread"] }
-hyper = { version = "0.14", default-features = false, features = ["client", "http1"] }
 
-warp-filter-request = { version = "0.0", path = "../warp-filter-request" }
+warp-filter-request = { version = "0.1", path = "../warp-filter-request" }
 
 futures-util = { version = "0.3" }

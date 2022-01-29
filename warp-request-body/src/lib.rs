@@ -5,7 +5,6 @@ use core::{
 };
 
 use bytes::Bytes;
-use futures_util::StreamExt;
 use pin_project_lite::pin_project;
 use warp::{
     hyper::{Body as HyperBody, Request as HyperRequest},
@@ -63,7 +62,7 @@ impl Body {
         stream: impl Stream<Item = Result<impl Buf + 'static, WarpError>> + Send + 'static,
     ) -> Self {
         Self::Stream {
-            inner: utils::buf_stream_to_bytes_stream(stream).boxed(),
+            inner: Box::pin(utils::buf_stream_to_bytes_stream(stream)),
         }
     }
 
