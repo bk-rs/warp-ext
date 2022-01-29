@@ -11,7 +11,7 @@ use crate::common::make_request_without_body;
 
 //
 pub fn with_body_stream() -> impl Filter<
-    Extract = (HyperRequest<impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static>,),
+    Extract = (HyperRequest<impl Stream<Item = Result<impl Buf, WarpError>>>,),
     Error = Rejection,
 > + Copy {
     warp::any()
@@ -38,7 +38,7 @@ pub fn with_body_stream() -> impl Filter<
 }
 
 pub fn with_body_stream_and_one_extension<T1>() -> impl Filter<
-    Extract = (HyperRequest<impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static>,),
+    Extract = (HyperRequest<impl Stream<Item = Result<impl Buf, WarpError>>>,),
     Error = Rejection,
 > + Copy
 where
@@ -69,7 +69,7 @@ where
 }
 
 pub fn with_body_stream_and_two_extensions<T1, T2>() -> impl Filter<
-    Extract = (HyperRequest<impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static>,),
+    Extract = (HyperRequest<impl Stream<Item = Result<impl Buf, WarpError>>>,),
     Error = Rejection,
 > + Copy
 where
@@ -101,9 +101,9 @@ fn make_request<T1, T2>(
     path: FullPath,
     query: Option<String>,
     headers: HeaderMap,
-    body: impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static,
+    body: impl Stream<Item = Result<impl Buf, WarpError>>,
     extensions: (Option<T1>, Option<T2>),
-) -> Result<HyperRequest<impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static>, Rejection>
+) -> Result<HyperRequest<impl Stream<Item = Result<impl Buf, WarpError>>>, Rejection>
 where
     T1: Clone + Send + Sync + 'static,
     T2: Clone + Send + Sync + 'static,
@@ -112,4 +112,34 @@ where
         make_request_without_body(method, path, query, headers, extensions)?.into_parts();
 
     Ok(HyperRequest::from_parts(parts, body))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct Ext1(usize);
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct Ext2(isize);
+
+    #[tokio::test]
+    async fn test_and_extension() {
+        let req = warp::test::request()
+            .extension(Ext1(1))
+            .filter(&with_body_stream_and_one_extension::<Ext1>())
+            .await
+            .unwrap();
+        assert_eq!(req.extensions().get::<Ext1>().unwrap(), &Ext1(1));
+
+        let req = warp::test::request()
+            .extension(Ext1(1))
+            .extension(Ext2(-1))
+            .filter(&with_body_stream_and_two_extensions::<Ext1, Ext2>())
+            .await
+            .unwrap();
+        assert_eq!(req.extensions().get::<Ext1>().unwrap(), &Ext1(1));
+        assert_eq!(req.extensions().get::<Ext2>().unwrap(), &Ext2(-1));
+    }
 }

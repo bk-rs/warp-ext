@@ -40,21 +40,21 @@ impl Default for Body {
 
 //
 impl Body {
-    pub fn with_buf(inner: impl Buf + 'static) -> Self {
+    pub fn with_buf(buf: impl Buf + 'static) -> Self {
         Self::Buf {
-            inner: Box::new(inner),
+            inner: Box::new(buf),
         }
     }
 
-    pub fn with_bytes(inner: Bytes) -> Self {
-        Self::Bytes { inner }
+    pub fn with_bytes(bytes: Bytes) -> Self {
+        Self::Bytes { inner: bytes }
     }
 
     pub fn with_stream(
-        inner: impl Stream<Item = Result<impl Buf + 'static, WarpError>> + Send + 'static,
+        stream: impl Stream<Item = Result<impl Buf + 'static, WarpError>> + Send + 'static,
     ) -> Self {
         Self::Stream {
-            inner: Box::pin(utils::buf_stream_to_bytes_stream(inner)),
+            inner: Box::pin(utils::buf_stream_to_bytes_stream(stream)),
         }
     }
 
@@ -106,5 +106,129 @@ impl Stream for Body {
             }
             BodyProj::Stream { inner } => inner.poll_next(cx),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use futures_util::StreamExt as _;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_with_buf() {
+        //
+        let buf = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::aggregate())
+            .await
+            .unwrap();
+        let body = Body::with_buf(buf);
+        assert!(!body.require_to_bytes_async());
+        assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
+
+        //
+        let req = warp::test::request()
+            .body("foo")
+            .filter(&warp_filter_request::with_body_aggregate())
+            .await
+            .unwrap();
+        let (_, buf) = req.into_parts();
+        let body = Body::with_buf(buf);
+        assert!(!body.require_to_bytes_async());
+        assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
+
+        //
+        let buf = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::aggregate())
+            .await
+            .unwrap();
+        let mut body = Body::with_buf(buf);
+        assert_eq!(
+            body.next().await.unwrap().unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
+        assert!(body.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_with_bytes() {
+        //
+        let bytes = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::bytes())
+            .await
+            .unwrap();
+        let body = Body::with_bytes(bytes);
+        assert!(!body.require_to_bytes_async());
+        assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
+
+        //
+        let req = warp::test::request()
+            .body("foo")
+            .filter(&warp_filter_request::with_body_bytes())
+            .await
+            .unwrap();
+        let (_, bytes) = req.into_parts();
+        let body = Body::with_bytes(bytes);
+        assert!(!body.require_to_bytes_async());
+        assert_eq!(body.to_bytes(), Bytes::copy_from_slice(b"foo"));
+
+        //
+        let bytes = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::bytes())
+            .await
+            .unwrap();
+        let mut body = Body::with_bytes(bytes);
+        assert_eq!(
+            body.next().await.unwrap().unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
+        assert!(body.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_with_stream() {
+        //
+        let stream = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::stream())
+            .await
+            .unwrap();
+        let body = Body::with_stream(stream);
+        assert!(body.require_to_bytes_async());
+        assert_eq!(
+            body.to_bytes_async().await.unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
+
+        //
+        let req = warp::test::request()
+            .body("foo")
+            .filter(&warp_filter_request::with_body_stream())
+            .await
+            .unwrap();
+        let (_, stream) = req.into_parts();
+        let body = Body::with_stream(stream);
+        assert!(body.require_to_bytes_async());
+        assert_eq!(
+            body.to_bytes_async().await.unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
+
+        //
+        let stream = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::stream())
+            .await
+            .unwrap();
+        let mut body = Body::with_stream(stream);
+        assert_eq!(
+            body.next().await.unwrap().unwrap(),
+            Bytes::copy_from_slice(b"foo")
+        );
+        assert!(body.next().await.is_none());
     }
 }

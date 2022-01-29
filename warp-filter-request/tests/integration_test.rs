@@ -120,7 +120,7 @@ async fn integration_test() -> Result<(), Box<dyn error::Error>> {
 
         //
         async fn stream_1(
-            req: Request<impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin>,
+            req: Request<impl Stream<Item = Result<impl Buf, WarpError>> + Unpin>,
         ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
             let (_, body) = req.into_parts();
             assert_eq!(
@@ -138,7 +138,7 @@ async fn integration_test() -> Result<(), Box<dyn error::Error>> {
 
         //
         async fn stream_2(
-            req: Request<impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin>,
+            req: Request<impl Stream<Item = Result<impl Buf, WarpError>> + Unpin>,
         ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
             let (_, body) = req.into_parts();
             assert_eq!(
@@ -156,7 +156,7 @@ async fn integration_test() -> Result<(), Box<dyn error::Error>> {
 
         //
         async fn stream_3(
-            req: Request<impl Stream<Item = Result<impl Buf, WarpError>> + Send + 'static + Unpin>,
+            req: Request<impl Stream<Item = Result<impl Buf, WarpError>> + Unpin>,
         ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
             let (_, body) = req.into_parts();
             assert_eq!(
