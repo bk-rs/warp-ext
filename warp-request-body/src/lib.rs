@@ -21,7 +21,7 @@ use error::Error;
 pin_project! {
     #[project = BodyProj]
     pub enum Body {
-        Buf { inner: Box<dyn Buf> },
+        Buf { inner: Box<dyn Buf + Send + 'static> },
         Bytes { inner: Bytes },
         Stream { #[pin] inner: Pin<Box<dyn Stream<Item = Result<Bytes, WarpError>> + Send + 'static>> },
         HyperBody { #[pin] inner: HyperBody }
@@ -49,7 +49,7 @@ impl Default for Body {
 
 //
 impl Body {
-    pub fn with_buf(buf: impl Buf + 'static) -> Self {
+    pub fn with_buf(buf: impl Buf + Send + 'static) -> Self {
         Self::Buf {
             inner: Box::new(buf),
         }
@@ -135,7 +135,9 @@ impl Stream for Body {
 }
 
 //
-pub fn buf_request_to_body_request(req: HyperRequest<impl Buf + 'static>) -> HyperRequest<Body> {
+pub fn buf_request_to_body_request(
+    req: HyperRequest<impl Buf + Send + 'static>,
+) -> HyperRequest<Body> {
     let (parts, body) = req.into_parts();
     HyperRequest::from_parts(parts, Body::with_buf(body))
 }
@@ -159,7 +161,7 @@ pub fn hyper_body_request_to_body_request(req: HyperRequest<HyperBody>) -> Hyper
 
 #[cfg(test)]
 mod tests {
-    use futures_util::StreamExt as _;
+    use futures_util::{stream::BoxStream, StreamExt as _, TryStreamExt};
 
     use super::*;
 
@@ -299,5 +301,36 @@ mod tests {
             Bytes::copy_from_slice(b"foo")
         );
         assert!(body.next().await.is_none());
+    }
+
+    pin_project! {
+        pub struct BodyWrapper {
+            #[pin]
+            inner: BoxStream<'static, Result<Bytes, Box<dyn std::error::Error + Send + Sync + 'static>>>
+        }
+    }
+    #[tokio::test]
+    async fn test_wrapper() {
+        //
+        let buf = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::aggregate())
+            .await
+            .unwrap();
+        let body = Body::with_buf(buf);
+        let _ = BodyWrapper {
+            inner: body.err_into().boxed(),
+        };
+
+        //
+        let stream = warp::test::request()
+            .body("foo")
+            .filter(&warp::body::stream())
+            .await
+            .unwrap();
+        let body = Body::with_stream(stream);
+        let _ = BodyWrapper {
+            inner: body.err_into().boxed(),
+        };
     }
 }
