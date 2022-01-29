@@ -1,7 +1,8 @@
-/// [Ref](https://github.com/seanmonstar/warp/issues/139)
-///
-/// Note: Cannot upgrade, becase warp::filters::ext::optional require Clone, bug hyper::upgrade::OnUpgrade cannot Clone
-///
+//! [Ref](https://github.com/seanmonstar/warp/issues/139)
+//!
+//! Note: Cannot upgrade, becase warp::filters::ext::optional require Clone, bug hyper::upgrade::OnUpgrade cannot Clone
+//!
+
 pub mod error;
 
 pub(crate) mod common;
