@@ -31,8 +31,8 @@ pin_project! {
 impl fmt::Display for Body {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Buf { inner: _ } => write!(f, "Buf"),
-            Self::Bytes { inner: _ } => write!(f, "Bytes"),
+            Self::Buf { inner } => f.debug_tuple("Buf").field(&inner.chunk()).finish(),
+            Self::Bytes { inner } => f.debug_tuple("Bytes").field(&inner).finish(),
             Self::Stream { inner: _ } => write!(f, "Stream"),
             Self::HyperBody { inner: _ } => write!(f, "HyperBody"),
         }
@@ -70,7 +70,9 @@ impl Body {
     pub fn with_hyper_body(hyper_body: HyperBody) -> Self {
         Self::HyperBody { inner: hyper_body }
     }
+}
 
+impl Body {
     pub fn require_to_bytes_async(&self) -> bool {
         matches!(
             self,
