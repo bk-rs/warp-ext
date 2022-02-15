@@ -27,7 +27,7 @@ pin_project! {
     }
 }
 
-impl fmt::Display for Body {
+impl fmt::Debug for Body {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Buf { inner } => f.debug_tuple("Buf").field(&inner.chunk()).finish(),
@@ -35,6 +35,12 @@ impl fmt::Display for Body {
             Self::Stream { inner: _ } => write!(f, "Stream"),
             Self::HyperBody { inner: _ } => write!(f, "HyperBody"),
         }
+    }
+}
+
+impl fmt::Display for Body {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -68,6 +74,12 @@ impl Body {
 
     pub fn with_hyper_body(hyper_body: HyperBody) -> Self {
         Self::HyperBody { inner: hyper_body }
+    }
+}
+
+impl From<HyperBody> for Body {
+    fn from(body: HyperBody) -> Self {
+        Self::with_hyper_body(body)
     }
 }
 
