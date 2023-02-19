@@ -23,3 +23,5 @@ hyper = { version = "0.14", default-features = false, features = ["client", "htt
 futures-util = { version = "0.3" }
 
 portpicker = { version = "0.1" }
+
+warp-request-body = { version = "0.2", path = "../warp-request-body" }

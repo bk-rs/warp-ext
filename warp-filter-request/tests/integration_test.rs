@@ -7,9 +7,7 @@ use warp::{
     hyper::{http::Method, Body, Client, Request, Response},
     Buf, Error as WarpError, Filter as _, Stream,
 };
-
-pub mod warp_request_body_utils;
-use warp_request_body_utils::{buf_stream_to_bytes, buf_to_bytes};
+use warp_request_body::utils::{buf_stream_to_bytes, buf_to_bytes};
 
 #[tokio::test]
 async fn integration_test() -> Result<(), Box<dyn std::error::Error>> {

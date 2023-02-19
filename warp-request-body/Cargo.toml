@@ -19,6 +19,8 @@ bytes = { version = "1", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 pin-project-lite = { version = "0.2", default-features = false }
 
+hyper-body-to-bytes = { version = "0.1", default-features = false }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
