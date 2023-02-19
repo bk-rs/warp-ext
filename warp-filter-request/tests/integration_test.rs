@@ -14,7 +14,7 @@ use warp_request_body_utils::{buf_stream_to_bytes, buf_to_bytes};
 #[tokio::test]
 async fn integration_test() -> Result<(), Box<dyn error::Error>> {
     let listen_addr = SocketAddr::from(([127, 0, 0, 1], portpicker::pick_unused_port().unwrap()));
-    println!("listen_addr {:?}", listen_addr);
+    println!("listen_addr {listen_addr:?}");
 
     let server_task = tokio::task::spawn(async move {
         //
@@ -22,7 +22,7 @@ async fn integration_test() -> Result<(), Box<dyn error::Error>> {
             req: Request<impl Buf>,
         ) -> Result<Result<Response<Body>, WarpHttpError>, Infallible> {
             let (parts, body) = req.into_parts();
-            println!("{:?}", parts);
+            println!("{parts:?}");
             assert_eq!(&parts.method, Method::POST);
             assert_eq!(parts.uri.path(), "/aggregate_1");
             assert_eq!(parts.uri.query(), Some("foo=1"));
