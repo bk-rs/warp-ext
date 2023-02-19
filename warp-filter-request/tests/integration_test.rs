@@ -1,5 +1,5 @@
 use core::convert::Infallible;
-use std::{error, net::SocketAddr};
+use std::net::SocketAddr;
 
 use bytes::Bytes;
 use warp::{
@@ -12,7 +12,7 @@ pub mod warp_request_body_utils;
 use warp_request_body_utils::{buf_stream_to_bytes, buf_to_bytes};
 
 #[tokio::test]
-async fn integration_test() -> Result<(), Box<dyn error::Error>> {
+async fn integration_test() -> Result<(), Box<dyn std::error::Error>> {
     let listen_addr = SocketAddr::from(([127, 0, 0, 1], portpicker::pick_unused_port().unwrap()));
     println!("listen_addr {listen_addr:?}");
 

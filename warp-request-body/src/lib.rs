@@ -1,5 +1,4 @@
 use core::{
-    fmt,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -27,8 +26,8 @@ pin_project! {
     }
 }
 
-impl fmt::Debug for Body {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Debug for Body {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Buf { inner } => f.debug_tuple("Buf").field(&inner.chunk()).finish(),
             Self::Bytes { inner } => f.debug_tuple("Bytes").field(&inner).finish(),
@@ -38,8 +37,8 @@ impl fmt::Debug for Body {
     }
 }
 
-impl fmt::Display for Body {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for Body {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{self:?}")
     }
 }
