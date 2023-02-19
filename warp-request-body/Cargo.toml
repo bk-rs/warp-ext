@@ -22,6 +22,6 @@ pin-project-lite = { version = "0.2", default-features = false }
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
-warp-filter-request = { version = "0.1", path = "../warp-filter-request" }
+warp-filter-request = { version = "0.2", path = "../warp-filter-request" }
 
 futures-util = { version = "0.3" }
